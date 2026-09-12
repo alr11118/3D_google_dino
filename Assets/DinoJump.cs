@@ -1,52 +1,113 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
 
-[RequireComponent(typeof(Rigidbody))]
+[RequireComponent(typeof(CharacterController))]
 public class DinoJump : MonoBehaviour
 {
+    [Header("Movement")]
+    public float forwardSpeed = 10f;
     public float jumpForce = 8f;
+    public float gravity = 20f;
 
-    public Transform groundCheck;
-    public LayerMask groundMask;
-    public float groundDistance = 0.4f;
+    private CharacterController controller;
 
-    private Rigidbody rb;
-    private bool isGrounded;
-    private bool hasJumped;
+    private Vector3 moveDirection = Vector3.zero;
+
+    [Header("Ducking")]
+    private bool isDucking = false;
+    private float originalHeight;
+    private Vector3 originalCenter;
 
     void Start()
     {
-        rb = GetComponent<Rigidbody>();
-        // Prevent the dinosaur from tipping over
-        rb.constraints = RigidbodyConstraints.FreezeRotation;
+        controller = GetComponent<CharacterController>();
+
+        // Save the original collider dimensions
+        originalHeight = controller.height;
+        originalCenter = controller.center;
     }
 
     void Update()
     {
-        // Check if we're touching the ground
-        if (groundCheck != null)
+        // FORWARD MOVEMENT
+        moveDirection.z = forwardSpeed;
+
+
+        // JUMP + GRAVITY
+        if (controller.isGrounded)
         {
-            isGrounded = Physics.CheckSphere(
-                groundCheck.position,
-                groundDistance,
-                groundMask
-            );
+            // Keep the dinosaur on the ground
+            moveDirection.y = -1f;
+
+            // Jump
+            if (Keyboard.current.upArrowKey.wasPressedThisFrame ||
+                Keyboard.current.wKey.wasPressedThisFrame ||
+                Keyboard.current.spaceKey.wasPressedThisFrame)
+            {
+                moveDirection.y = jumpForce;
+
+                // Stop ducking when jumping
+                if (isDucking)
+                {
+                    StopDuck();
+                }
+            }
+        }
+        else
+        {
+            // Gravity
+            moveDirection.y -= gravity * Time.deltaTime;
         }
 
-        // Reset jump when we are back on the ground
-        if (isGrounded)
+
+        // Duck
+        if (Keyboard.current.downArrowKey.wasPressedThisFrame ||
+            Keyboard.current.sKey.wasPressedThisFrame)
         {
-            hasJumped = false;
+            StartDuck();
         }
 
-        // Jump only if we haven't already jumped
-        if (Keyboard.current != null &&
-            Keyboard.current.spaceKey.wasPressedThisFrame &&
-            isGrounded &&
-            !hasJumped)
+        if (Keyboard.current.downArrowKey.wasReleasedThisFrame ||
+            Keyboard.current.sKey.wasReleasedThisFrame)
         {
-            rb.AddForce(Vector3.up * jumpForce, ForceMode.Impulse);
-            hasJumped = true;
+            StopDuck();
         }
+
+
+        // APPLY MOVEMENT
+        controller.Move(moveDirection * Time.deltaTime);
+    }
+
+
+    void StartDuck()
+    {
+        if (isDucking)
+            return;
+
+        isDucking = true;
+
+        // Make the collider half as tall
+        controller.height = originalHeight / 2f;
+
+        // Move the center DOWN so the bottom of the collider
+        // stays approximately in the same place.
+        controller.center = new Vector3(
+            originalCenter.x,
+            originalCenter.y - originalHeight / 4f,
+            originalCenter.z
+        );
+    }
+
+
+    void StopDuck()
+    {
+        if (!isDucking)
+            return;
+
+        isDucking = false;
+
+        // Restore collider
+        controller.height = originalHeight;
+        controller.center = originalCenter;
     }
 }
